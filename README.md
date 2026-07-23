@@ -4,7 +4,7 @@
 
 ### macOS‑style fullscreen **Spaces** for KDE Plasma 6
 
-Fullscreen or maximize a window and it glides onto **its own virtual desktop** — right next to the one you were on. Leave fullscreen and the desktop vanishes, dropping you back exactly where you started. Just like macOS.
+Fullscreen a window — or let a borderless game fill the screen — and it glides onto **its own virtual desktop**, right next to the one you were on. Leave fullscreen and the desktop vanishes, dropping you back exactly where you started. Just like macOS.
 
 ![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-1d99f3?logo=kde&logoColor=white)
 ![Wayland](https://img.shields.io/badge/Wayland-tested-2ea043)
@@ -18,11 +18,12 @@ Fullscreen or maximize a window and it glides onto **its own virtual desktop** �
 
 ## ✨ What it does
 
-- 🎬 **Fullscreen → own Space.** Any window that goes fullscreen (a video, a game, a presentation) is moved to a brand‑new virtual desktop created *immediately after* your current one.
-- 🪟 **Maximize too.** Maximizing a window does the same — a dedicated desktop, one app, zero distractions.
-- 🧹 **Auto‑cleanup.** Exit fullscreen, un‑maximize, or close the window and its temporary desktop is removed automatically. You never accumulate stray desktops.
+- 🎬 **Fullscreen → own Space.** Any window that goes truly fullscreen (a video, a game, a presentation — at *any* resolution) is moved to a brand‑new virtual desktop created *immediately after* your current one.
+- 🎮 **Borderless games too.** A window sized exactly to the screen (borderless / "fullscreen windowed" games) gets its own Space as well. A normally‑*maximized* window — which stops at your panel — is deliberately left alone.
+- 🧠 **Game‑aware.** A short debounce absorbs the fullscreen flicker games produce when changing resolution, and all windows of one app (e.g. an anti‑cheat launcher + the game) share a **single** Space instead of each spawning their own.
+- 🧹 **Auto‑cleanup.** Exit fullscreen or close the window and its temporary desktop is removed automatically. You never accumulate stray desktops.
 - 🎯 **The Space stays pure.** Open a new window while in a fullscreen Space and it's sent back to the previous desktop (and follows you there). The app's own dialogs and pickers stay put — exactly the macOS behavior.
-- 🌊 **No jarring animation.** The automatic switch skips the slide effect, so it feels instant. Your *manual* desktop switches keep animating like normal.
+- 🫥 **Overlay‑proof.** OSDs, notifications and tiling‑helper overlays (e.g. KZones) cover the screen too — they're filtered out and never trigger anything.
 - ⌨️ **One shortcut.** `Meta + F` toggles fullscreen‑to‑a‑new‑desktop for the active window. Fully rebindable.
 
 > **Works great with:** YouTube & video fullscreen, exclusive‑fullscreen games, IDEs, PDF/reading, anything you want to focus on.
@@ -94,11 +95,13 @@ qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
 ```
 
-**Fullscreen only (truest macOS behavior).** To *not* trigger on maximize, change the trigger in `evaluate()`:
+**Fullscreen only (truest macOS behavior).** To *not* trigger on screen‑sized borderless windows, change the trigger in `evaluateNow()`:
 
 ```js
-const active = w.fullScreen;              // was: w.fullScreen || isMaximized(w)
+const active = w.fullScreen;              // was: w.fullScreen || coversScreen(w)
 ```
+
+**Debounce.** `DEBOUNCE_MS` (default `250`) is how long the script waits for a window's fullscreen state to settle before acting — games flicker it several times when applying a resolution change.
 
 **Debugging.** Set `const DEBUG = true;` at the top, reload, then watch:
 
@@ -110,12 +113,20 @@ journalctl --user -f -t kwin_wayland | grep fs2desktop
 
 ## 🧠 How it works
 
-On fullscreen/maximize, the script snapshots the window's current desktop, creates a
-new one right after it, and moves the window there — assigning the window **and**
-switching to the desktop in the same synchronous step (so browsers don't drop out of
-fullscreen from the visibility change). On exit it restores the original desktop and
-removes the temporary one if it's empty. The slide effect is briefly unloaded around
-each automatic switch so it feels instant, then restored for your manual switches.
+A window earns its own Space when KWin flags it fullscreen **or** when its frame
+exactly covers its screen (borderless games). Reactions are debounced (~250 ms) so
+the fullscreen flicker games produce while switching resolution collapses into a
+single action on the settled state.
+
+When triggered, the script snapshots the window's *real* home desktops (by stable
+id — never a temporary one), creates a new desktop right after the current one (or
+joins the Space an earlier window of the same app already owns), and moves the
+window there — assigning the window **and** switching desktops in the same
+synchronous step, so browsers don't drop out of fullscreen from the visibility
+change. Everything runs synchronously in event order; there are no async callbacks
+that could interleave and corrupt state. On exit the saved ids are re‑resolved to
+fresh desktop objects, the window is restored, and the temporary desktop is removed
+once its last window leaves.
 
 ---
 
@@ -123,8 +134,9 @@ each automatic switch so it feels instant, then restored for your manual switche
 
 - **Nothing happens.** Make sure the script is enabled (System Settings → KWin Scripts) and try logging out/in once. Confirm with:
   `qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded fullscreen-to-new-desktop`
-- **A stray desktop was left behind.** This can happen only if you *reload the script while a window is fullscreen* (the in‑memory tracking resets). Normal use cleans up after itself.
-- **A borderless‑fullscreen game isn't caught.** Some games use *borderless windowed* mode, which is indistinguishable from an ordinary screen‑filling window and is intentionally not triggered (to avoid false positives). Use the game's exclusive‑fullscreen mode, or maximize it.
+- **A stray desktop was left behind.** This can happen only if you *reload the script while a window is fullscreen* (the in‑memory tracking resets). Normal use — including closing a fullscreen window outright — cleans up after itself.
+- **A screen‑filling window I *didn't* want moved.** The trigger is "frame exactly covers the screen". A window you manually resized to the full screen qualifies; drag it 1 px smaller, or switch the trigger to fullscreen‑only (see Configuration).
+- **The Space switch animates.** That's the normal desktop‑switch effect; the script deliberately doesn't touch compositor effects (toggling them caused frame drops).
 
 ---
 

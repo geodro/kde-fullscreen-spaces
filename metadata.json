@@ -3,9 +3,9 @@
     "KPlugin": {
         "Id": "fullscreen-to-new-desktop",
         "Name": "Fullscreen to New Desktop",
-        "Description": "Moves fullscreened or maximized windows to their own new virtual desktop, macOS-Spaces style.",
+        "Description": "Moves fullscreen windows (and borderless screen-sized games) to their own new virtual desktop, macOS-Spaces style.",
         "Icon": "virtual-desktops",
-        "Version": "1.0.0",
+        "Version": "1.1.0",
         "License": "MIT",
         "Authors": [
             { "Name": "George Dumitrescu" }
