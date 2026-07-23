@@ -6,12 +6,25 @@
 const DEBUG = false;
 function log(msg) { if (DEBUG) print("[fs2desktop] " + msg); }
 
-// NOTE: all desktop moves/switches below are SYNCHRONOUS. The original design ran
-// them inside an async DBus reply callback (to un-animate the switch), but that let
-// a game's rapid fullscreen flicker interleave the deferred moves, corrupting the
-// saved base and leaving orphan desktops. Synchronous moves run in strict event
-// order and cannot race; the automatic switch just uses the normal desktop
-// animation, which is fine.
+// Run `fn` with the "slide" desktop-switch animation temporarily disabled, so the
+// automatic hop onto (or off) a Space is instant instead of a visible slide — which
+// otherwise flashes the wallpaper/background through a transparent fullscreen window.
+// `fn` runs inside the DBus reply callback, i.e. once the effect is actually
+// unloaded, then the effect is restored so your MANUAL switches keep animating.
+//
+// This is async. For a normal fullscreen enter/exit there are no competing events,
+// so nothing interleaves. During a game's brief fullscreen flicker the callbacks can
+// overlap, but moveToNewDesktop() returns early when already managed and the id-based
+// bookkeeping keeps state correct, so it settles cleanly. runNoSlide runs about once
+// per enter and once per exit — no effect thrashing.
+function runNoSlide(fn) {
+    callDBus("org.kde.KWin", "/Effects", "org.kde.kwin.Effects",
+             "unloadEffect", "slide", function () {
+        fn();
+        callDBus("org.kde.KWin", "/Effects", "org.kde.kwin.Effects",
+                 "loadEffect", "slide");
+    });
+}
 
 // internalId -> { tempDesktopId, savedDesktopIds, reason, app }
 // We store desktop *ids* (stable strings), never VirtualDesktop wrappers, which go
@@ -132,12 +145,14 @@ function moveToNewDesktop(w, reason) {
         dt = workspace.desktops[insertPos];
     }
     state[key] = { tempDesktopId: dt.id, savedDesktopIds: savedIds, reason: reason, app: appKey(w) };
-    // Move the window to the new desktop AND make that desktop current in the SAME
-    // synchronous block, so the window is never briefly on a non-current desktop.
-    // Otherwise Chromium/Brave detect the visibility change and drop out of
-    // fullscreen the instant we move them, which would immediately undo everything.
-    w.desktops = [dt];
-    workspace.currentDesktop = dt;
+    // Move the window to the new desktop AND make that desktop current together, so
+    // the window is never briefly on a non-current desktop — otherwise Chromium/Brave
+    // detect the visibility change and drop out of fullscreen the instant we move
+    // them. Un-animated so the Space appears instantly, no slide.
+    runNoSlide(function () {
+        w.desktops = [dt];
+        workspace.currentDesktop = dt;
+    });
     log("moved '" + w.caption + "' to desktop " + dt.id + " (" + reason
         + "), saved=[" + savedIds.join(",") + "]");
 }
@@ -167,68 +182,46 @@ function moveBack(w) {
     // wrappers (or switching to one) silently no-ops — which is what stranded the
     // window on the temp Space instead of sending it back where it came from.
     const freshSaved = s.savedDesktopIds.map(desktopById).filter(Boolean);
-    w.desktops = freshSaved;            // empty array => "on all desktops"
+    w.desktops = freshSaved;            // empty array => "on all desktops" (sync: off temp first)
     const target = freshSaved.length > 0 ? freshSaved[0] : workspace.desktops[0];
     log("moveBack '" + w.caption + "' -> " + (target && target.id)
         + " (saved=[" + s.savedDesktopIds.join(",") + "])");
-    // All synchronous, in event order: move the window back, switch to its base
-    // desktop, then remove the now-empty temp desktop.
-    workspace.currentDesktop = target;
-    if (!desktopStillUsed(s.tempDesktopId, key)) {
-        const dt = desktopById(s.tempDesktopId);
-        if (dt) {
-            workspace.removeDesktop(dt);
-            log("removed temp desktop " + s.tempDesktopId + " for '" + w.caption + "'");
+    // Switch back un-animated (no slide), then — still inside the callback, after the
+    // window is off the temp desktop — remove it if nothing else is left on it.
+    runNoSlide(function () {
+        workspace.currentDesktop = target;
+        if (!desktopStillUsed(s.tempDesktopId, key)) {
+            const dt = desktopById(s.tempDesktopId);
+            if (dt) {
+                workspace.removeDesktop(dt);
+                log("removed temp desktop " + s.tempDesktopId + " for '" + w.caption + "'");
+            }
         }
-    }
+    });
 }
 
-// Debounce fullscreen/maximize reactions. Games flicker fullscreen several times
-// when applying a resolution change (and show a transient windowed "keep these
-// settings?" dialog in between). Reacting to each transition created and destroyed
-// desktops in a flurry and could leave the game on the wrong final desktop. Instead
-// we (re)start a short per-window timer on every change and act ONCE, on the settled
-// state, when it stops flickering.
-const HAS_QTIMER = (typeof QTimer !== "undefined");
-const DEBOUNCE_MS = 250;
-const evalTimers = {};   // internalId -> QTimer
+// A window earns its own Space if KWin flags it fullscreen (real exclusive
+// fullscreen — true at ANY resolution, even a game set below native res), OR if it
+// is sized to the whole screen (borderless "fullscreen windowed" games, which KWin
+// reports only as maximized). A normally-maximized window is neither.
+function isActive(w) { return w.fullScreen || coversScreen(w); }
 
-function scheduleEvaluate(w) {
-    if (!shouldManage(w)) return;
-    if (!HAS_QTIMER) { evaluateNow(w); return; }
-    const key = "" + w.internalId;
-    let t = evalTimers[key];
-    if (!t) {
-        t = new QTimer();
-        t.singleShot = true;
-        t.interval = DEBOUNCE_MS;
-        t.timeout.connect(function () { evaluateNow(w); });
-        evalTimers[key] = t;
-    }
-    t.start();           // (re)start the countdown — coalesces rapid flicker
-}
-
-function cancelEvaluate(w) {
-    const key = "" + (w && w.internalId);
-    const t = evalTimers[key];
-    if (t) { t.stop(); delete evalTimers[key]; }
-}
-
-function evaluateNow(w) {
+// React immediately in BOTH directions — no debounce. Entering must be instant and
+// un-animated (see runNoSlide) so there's no visible slide/delay; leaving must be
+// instant too, otherwise the window lingers on its Space for a beat before snapping
+// back, which reads as a flicker. Games flicking fullscreen off/on for a few frames
+// (e.g. changing resolution) may briefly create+remove a desktop, but the id-based
+// bookkeeping, realBaseIds() and the self-excluding desktopStillUsed() keep the
+// final state correct (one Space, no orphans).
+function react(w) {
     if (!shouldManage(w)) return;
     // Don't react mid-drag/resize: the geometry is transient and would flip the
     // window onto a new desktop while the user is still sizing it.
     if (w.move || w.resize) return;
-    if (DEBUG) {
-        log("evaluate '" + w.caption + "' fs=" + w.fullScreen + " max=" + w.maximizeMode
-            + " class=" + w.resourceClass + " covers=" + coversScreen(w));
-    }
-    // A window earns its own Space if KWin flags it fullscreen (real exclusive
-    // fullscreen — true at ANY resolution, even a game set below native res), OR if
-    // it is sized to the whole screen (borderless "fullscreen windowed" games, which
-    // KWin reports only as maximized). A normally-maximized window is neither.
-    const active = w.fullScreen || coversScreen(w);
     const managed = !!state[w.internalId];
+    const active = isActive(w);
+    if (DEBUG) log("react '" + w.caption + "' fs=" + w.fullScreen + " max=" + w.maximizeMode
+        + " covers=" + coversScreen(w) + " active=" + active + " managed=" + managed);
     if (active && !managed) {
         moveToNewDesktop(w, w.fullScreen ? "fullscreen" : "screen-sized");
     } else if (!active && managed) {
@@ -242,9 +235,9 @@ function attach(w) {
     // NOT listen to frameGeometryChanged — it fires on every drag/resize and would
     // fling ordinary windows onto new desktops. Borderless "fullscreen" games still
     // flip KWin's maximize/fullscreen state, so these two signals are enough; the
-    // coversScreen() check in evaluateNow() then confirms it's actually screen-sized.
-    w.fullScreenChanged.connect(function () { scheduleEvaluate(w); });
-    w.maximizedChanged.connect(function () { scheduleEvaluate(w); });
+    // coversScreen() check in react() then confirms it's actually screen-sized.
+    w.fullScreenChanged.connect(function () { react(w); });
+    w.maximizedChanged.connect(function () { react(w); });
 }
 
 // Keep a dedicated fullscreen desktop pure: independent new windows opened while
@@ -282,7 +275,7 @@ function redirectIfOnDedicated(w) {
 
 function onWindowAdded(w) {
     attach(w);                 // watch for it going fullscreen/maximized
-    scheduleEvaluate(w);       // catch windows that are BORN fullscreen/maximized (e.g. Chromium spawns a new fullscreen surface)
+    react(w);                  // catch windows that are BORN fullscreen/maximized (e.g. Chromium spawns a new fullscreen surface)
     redirectIfOnDedicated(w);  // ...or if it just spawned on a fullscreen desktop, move it away
 }
 
@@ -290,9 +283,8 @@ function onWindowAdded(w) {
 workspace.stackingOrder.forEach(attach);
 // New windows
 workspace.windowAdded.connect(onWindowAdded);
-// Cleanup on close (window may vanish while on its temp desktop). Cancel any
-// pending debounced evaluate first so it can't fire on the gone window.
-workspace.windowRemoved.connect(function (w) { cancelEvaluate(w); moveBack(w); });
+// Cleanup on close (window may vanish while on its temp desktop).
+workspace.windowRemoved.connect(function (w) { moveBack(w); });
 
 // Global shortcut: toggle fullscreen on the active window (rest happens via handler).
 // Reconfigurable in System Settings -> Shortcuts -> KWin.
