@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Id": "fullscreen-to-new-desktop",
+        "Name": "Fullscreen to New Desktop",
+        "Description": "Moves fullscreened or maximized windows to their own new virtual desktop, macOS-Spaces style.",
+        "Icon": "virtual-desktops",
+        "Version": "1.0.0",
+        "License": "MIT",
+        "Authors": [
+            { "Name": "George Dumitrescu" }
+        ],
+        "Website": "https://github.com/geodro/kde-fullscreen-spaces",
+        "Category": "Virtual Desktops",
+        "EnabledByDefault": true
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
