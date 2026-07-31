@@ -26,7 +26,37 @@ function runNoSlide(fn) {
     });
 }
 
-// internalId -> { tempDesktopId, savedDesktopIds, reason, app }
+// Applications whose windows must NEVER get (or be pushed off) a Space, matched on
+// resourceClass/resourceName, case-insensitively.
+//
+// Screenshot and screen-recording tools put up a genuine fullscreen window to let you
+// pick a region: Spectacle's capture overlay is normalWindow=true, fullScreen=true,
+// skipTaskbar/Pager/Switcher all false — property-for-property indistinguishable from a
+// fullscreen game, so no generic heuristic can tell them apart. It has to be by app.
+// Same story for screen lockers and portal screen-share pickers, and excluding the whole
+// class also keeps the tool's *result* window (Spectacle's image viewer) from yanking you
+// off a Space when you screenshot a fullscreen game.
+//
+// Add your own entries here if some other overlay app trips the script.
+const EXCLUDED_CLASSES = [
+    "spectacle", "org.kde.spectacle",              // KDE screenshot + screen recorder
+    "flameshot", "org.flameshot.flameshot",        // screenshot
+    "ksnip", "org.ksnip.ksnip",                    // screenshot
+    "obs", "com.obsproject.studio",                // region selector
+    "kscreenlocker_greet",                         // lock screen
+    "xdg-desktop-portal-kde",                      // screen-share / screenshot picker
+    "xdg-desktop-portal-gnome",
+    "plasmashell", "org.kde.plasmashell",          // Overview, KRunner, OSDs
+    "kwin", "kwin_wayland", "kwin_x11",            // KWin's own internal windows
+];
+
+function isExcluded(w) {
+    const cls = ("" + (w.resourceClass || "")).toLowerCase();
+    const nam = ("" + (w.resourceName || "")).toLowerCase();
+    return EXCLUDED_CLASSES.some(function (e) { return cls === e || nam === e; });
+}
+
+// internalId -> { tempDesktopId, savedDesktopIds, reason, app, appClass, pid }
 // We store desktop *ids* (stable strings), never VirtualDesktop wrappers, which go
 // stale as desktops are created/removed and would make later switches silently fail.
 const state = {};
@@ -37,7 +67,34 @@ const state = {};
 // goes fullscreen. Grouping by app lets them all share ONE dedicated desktop
 // instead of each spawning its own, which is what left a stray empty Space behind.
 function appKey(w) {
-    return (w.resourceClass || w.resourceName || "") + "|" + (w.pid || 0);
+    return appClass(w) + "|" + (w.pid || 0);
+}
+
+// Just the application identity, without the pid — used to decide whether a newly
+// opened window belongs to the app that owns a dedicated Space (see redirectIfOnDedicated).
+// May legitimately be EMPTY: Chromium/Brave's Picture-in-Picture window sets no
+// Wayland app_id, so both resourceClass and resourceName come through blank.
+function appClass(w) {
+    return ("" + (w.resourceClass || w.resourceName || "")).toLowerCase();
+}
+
+// Does `w` belong to the app that owns the Space described by `s`? Three signals,
+// because no single one covers the real cases:
+//   - same resourceClass — a second window of the fullscreen app;
+//   - same pid — Chromium's Picture-in-Picture window, which shares the browser
+//     process but reports no class at all;
+//   - no identity at all — if we cannot tell whose window it is, we do NOT get to
+//     throw it (and the user) off the Space. Redirecting switches the desktop out
+//     from under a still-fullscreen window, and the browser then drops out of
+//     fullscreen from the visibility change — which is exactly the loop that made
+//     PiP so disruptive.
+// The same predicate decides who gets evacuated when the fullscreen window leaves,
+// so anything we let stay is also brought back — no window is ever stranded.
+function isCompanionOf(w, s) {
+    const cls = appClass(w);
+    if (!cls) return true;
+    if (s.appClass && cls === s.appClass) return true;
+    return !!(w.pid && s.pid && w.pid === s.pid);
 }
 
 // If another managed fullscreen window from the same app already has a dedicated
@@ -78,14 +135,17 @@ function shouldManage(w) {
     // exactly the window we need to move to its own desktop. (moveable refers to
     // interactive dragging, not to virtual-desktop assignment.)
     if (!w || !w.normalWindow) return false;
+    if (isExcluded(w)) return false;
     if (w.desktopWindow || w.dock || w.splash || w.utility) return false;
     // Skip special/overlay surfaces: OSDs, notifications, tooltips, popups.
     if (w.onScreenDisplay || w.notification || w.criticalNotification
         || w.tooltip || w.popupWindow) return false;
-    // Full-screen overlays from tiling helpers (e.g. KZones' "KZones Overlay",
-    // shown while dragging a window) cover the whole screen but are NOT real app
-    // windows — they skip the taskbar, pager AND switcher. A genuine fullscreen
-    // game or browser stays present in the taskbar, so this never excludes those.
+    // Belt-and-braces for full-screen helper overlays that cover the whole screen but
+    // are not real app windows. KZones' overlay is already caught by popupWindow above
+    // (measured: normalWindow=true, popupWindow=true, layer=9, pid=-1, and skipTaskbar/
+    // skipPager/skipSwitcher all FALSE — so do not rely on the skip* hints for it).
+    // This still catches overlays that do set all three. A genuine fullscreen game or
+    // browser stays present in the taskbar, so it never excludes those.
     if (w.skipTaskbar && w.skipPager && w.skipSwitcher) return false;
     return true;
 }
@@ -144,7 +204,8 @@ function moveToNewDesktop(w, reason) {
         workspace.createDesktop(insertPos, w.caption || "Fullscreen");
         dt = workspace.desktops[insertPos];
     }
-    state[key] = { tempDesktopId: dt.id, savedDesktopIds: savedIds, reason: reason, app: appKey(w) };
+    state[key] = { tempDesktopId: dt.id, savedDesktopIds: savedIds, reason: reason,
+                   app: appKey(w), appClass: appClass(w), pid: w.pid || 0 };
     // Move the window to the new desktop AND make that desktop current together, so
     // the window is never briefly on a non-current desktop — otherwise Chromium/Brave
     // detect the visibility change and drop out of fullscreen the instant we move
@@ -170,6 +231,32 @@ function desktopStillUsed(dtId, exceptInternalId) {
     });
 }
 
+// Pull the fullscreen app's companion windows (e.g. a browser's Picture-in-Picture)
+// off the temp desktop and onto `base`. redirectIfOnDedicated deliberately lets those
+// stay on the Space while the fullscreen window is there; once it leaves they have to
+// come along, otherwise they sit alone on a Space nothing else uses — and, worse, they
+// keep desktopStillUsed() true so that Space is never cleaned up.
+// Only companions (isCompanionOf) that we are not already managing get moved: a window
+// of some OTHER identifiable app, parked there by hand, still counts as "in use" and
+// keeps the desktop alive, exactly as before.
+function evacuateCompanions(s, base, exceptInternalId) {
+    // Another fullscreen window still owns this Space (apps that spawn several
+    // fullscreen surfaces share one — see existingDesktopForApp). Leave everything put.
+    for (const k in state) {
+        if (state[k].tempDesktopId === s.tempDesktopId) return;
+    }
+    const except = exceptInternalId != null ? "" + exceptInternalId : null;
+    const dest = base.length > 0 ? base : [workspace.desktops[0]];
+    workspace.stackingOrder.forEach(function (o) {
+        if (except !== null && ("" + o.internalId) === except) return;
+        if (state["" + o.internalId]) return;   // managed itself — its own moveBack handles it
+        if (!isCompanionOf(o, s)) return;       // a window the user parked here stays, and keeps the Space alive
+        if (!o.desktops.some(function (d) { return d.id === s.tempDesktopId; })) return;
+        o.desktops = dest;
+        log("evacuated companion '" + o.caption + "' off the dedicated desktop");
+    });
+}
+
 function moveBack(w) {
     if (!w) return;
     const key = w.internalId;
@@ -190,6 +277,7 @@ function moveBack(w) {
     // window is off the temp desktop — remove it if nothing else is left on it.
     runNoSlide(function () {
         workspace.currentDesktop = target;
+        evacuateCompanions(s, freshSaved, key);
         if (!desktopStillUsed(s.tempDesktopId, key)) {
             const dt = desktopById(s.tempDesktopId);
             if (dt) {
@@ -251,6 +339,7 @@ function baseDesktopsFor(s) {
 function redirectIfOnDedicated(w) {
     if (!w) return;
     if (state["" + w.internalId]) return;          // this window is itself a managed fullscreen window
+    if (isExcluded(w)) return;                     // screenshot overlays etc. must stay where they opened
     if (!w.normalWindow) return;                   // dialogs / utility / splash stay put
     if (w.transient || w.transientFor) return;     // child windows stay with their parent
     if (!w.moveable) return;
@@ -261,6 +350,16 @@ function redirectIfOnDedicated(w) {
         const s = state[key];
         const onThisTemp = wd.some(function (d) { return d.id === s.tempDesktopId; });
         if (onThisTemp) {
+            // Windows belonging to the app that OWNS this Space stay on it. A browser's
+            // Picture-in-Picture window is a separate top-level window — not transient,
+            // not a dialog — so the checks above don't catch it, and redirecting it threw
+            // the user off the fullscreen video onto another desktop every time PiP
+            // popped up. Same for a second window of a fullscreen app: it belongs with
+            // its app, which is also how macOS treats windows opened from a fullscreen app.
+            if (isCompanionOf(w, s)) {
+                log("keeping same-app window '" + w.caption + "' on the dedicated desktop");
+                return;
+            }
             const base = baseDesktopsFor(s);
             w.desktops = base;
             // Follow the window: switch to the base desktop and focus it, so the

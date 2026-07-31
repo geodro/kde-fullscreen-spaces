@@ -22,8 +22,10 @@ Fullscreen a window — or let a borderless game fill the screen — and it glid
 - 🎮 **Borderless games too.** A window sized exactly to the screen (borderless / "fullscreen windowed" games) gets its own Space as well. A normally‑*maximized* window — which stops at your panel — is deliberately left alone.
 - 🧠 **Game‑aware.** All windows of one app (e.g. an anti‑cheat launcher + the game) share a **single** Space instead of each spawning their own, and the flicker games produce while changing resolution settles cleanly to one Space.
 - 🧹 **Auto‑cleanup.** Exit fullscreen or close the window and its temporary desktop is removed automatically. You never accumulate stray desktops.
-- 🎯 **The Space stays pure.** Open a new window while in a fullscreen Space and it's sent back to the previous desktop (and follows you there). The app's own dialogs and pickers stay put — exactly the macOS behavior.
+- 🎯 **The Space stays pure.** Open a window from *another* app while in a fullscreen Space and it's sent back to the previous desktop (and follows you there) — exactly the macOS behavior.
+- 🖼️ **Picture‑in‑Picture friendly.** Windows belonging to the app that owns the Space stay on it — a browser's PiP window, or a second window of the fullscreen app. Matching is by class **or pid**, because Chromium/Brave's PiP window sets no Wayland `app_id` at all (it reports an empty `resourceClass`); windows with no identity are left alone rather than moved. Previously PiP dragged you to another desktop *and* knocked the browser out of fullscreen, since switching the desktop under a fullscreen window makes it react to the visibility change. When you leave fullscreen the companions come back with it, so no Space is left stranded.
 - 🫥 **Overlay‑proof.** OSDs, notifications and tiling‑helper overlays (e.g. KZones) cover the screen too — they're filtered out and never trigger anything.
+- 📸 **Screenshot‑safe.** Screenshot/recording tools put up a *real* fullscreen window to let you pick a region — property‑for‑property identical to a fullscreen game. Spectacle, Flameshot, ksnip, portal pickers and the lock screen are excluded by name (`EXCLUDED_CLASSES` in `main.js` — add your own).
 - ⌨️ **One shortcut.** `Meta + F` toggles fullscreen‑to‑a‑new‑desktop for the active window. Fully rebindable.
 
 > **Works great with:** YouTube & video fullscreen, exclusive‑fullscreen games, IDEs, PDF/reading, anything you want to focus on.
@@ -127,6 +129,16 @@ the saved ids are re‑resolved to fresh desktop objects, the window is restored
 the temporary desktop is removed once its last window leaves. All desktop ids are
 stored as stable strings — never `VirtualDesktop` wrappers, which go stale — so a
 game briefly flicking fullscreen still settles to a single clean Space.
+
+New windows born on a dedicated Space are matched against the app that owns it by
+`isCompanionOf()`: same `resourceClass`, same pid, or **no identity at all**. A
+different, identifiable app is redirected to the home desktop and you follow it;
+everything else stays. The pid and no‑identity arms exist because Chromium's
+Picture‑in‑Picture window reports an empty `resourceClass` on Wayland — class alone
+never matched it. The same predicate decides who gets evacuated when the fullscreen
+window exits, so nothing we let stay can strand the Space. Apps in
+`EXCLUDED_CLASSES` are ignored on both paths, which is what keeps Spectacle's
+fullscreen capture overlay from stealing a Space.
 
 ---
 
