@@ -317,6 +317,18 @@ function react(w) {
     }
 }
 
+// Grabbing a managed window by hand ends its Space, whatever its size still is.
+// A window that merely got a screen-sized geometry from the compositor KEEPS that
+// size while you drag it, so coversScreen() stays true and react() never fires —
+// without this the window would be stuck on its Space for good. The user putting a
+// hand on it (move or resize) is the intent signal: send it home and drop the Space,
+// geometry untouched.
+function onInteractiveGrab(w) {
+    if (!state[w.internalId]) return;
+    log("interactive grab on '" + w.caption + "' — releasing its Space");
+    moveBack(w);
+}
+
 function attach(w) {
     if (!shouldManage(w)) return;
     // Only react to real state changes (fullscreen / maximize). We deliberately do
@@ -326,6 +338,7 @@ function attach(w) {
     // coversScreen() check in react() then confirms it's actually screen-sized.
     w.fullScreenChanged.connect(function () { react(w); });
     w.maximizedChanged.connect(function () { react(w); });
+    w.interactiveMoveResizeStarted.connect(function () { onInteractiveGrab(w); });
 }
 
 // Keep a dedicated fullscreen desktop pure: independent new windows opened while
