@@ -224,6 +224,7 @@ function moveToNewDesktop(w, reason) {
     // is gone, so cleanup stays correct.
     const sharedId = existingDesktopForApp(w);
     let dt = sharedId ? desktopById(sharedId) : null;
+    const joined = !!dt;
     if (dt) {
         log("joining existing desktop for app '" + (w.resourceClass || w.caption) + "'");
     } else {
@@ -235,8 +236,11 @@ function moveToNewDesktop(w, reason) {
         workspace.createDesktop(insertPos, SPACE_PREFIX + (w.caption || "Fullscreen"));
         dt = workspace.desktops[insertPos];
     }
+    // `namer`: only the window the Space was created for gets to (re)name it — when an
+    // app's second window joins an existing Space, the title stays the first one's.
     state[key] = { tempDesktopId: dt.id, savedDesktopIds: savedIds, reason: reason,
-                   app: appKey(w), appClass: appClass(w), pid: w.pid || 0 };
+                   app: appKey(w), appClass: appClass(w), pid: w.pid || 0,
+                   namer: !joined };
     // Move the window to the new desktop AND make that desktop current together, so
     // the window is never briefly on a non-current desktop — otherwise Chromium/Brave
     // detect the visibility change and drop out of fullscreen the instant we move
@@ -360,6 +364,20 @@ function onInteractiveGrab(w) {
     moveBack(w);
 }
 
+// Keep the Space's name in step with the window's title — a browser tab switch or a new
+// video otherwise leaves the pager showing whatever the title happened to be at the
+// moment the Space was created. Skipping a no-op assignment matters: KWin persists
+// desktop names to kwinrc on every change.
+function renameSpace(w) {
+    const s = state[w.internalId];
+    if (!s || !s.namer) return;
+    const dt = desktopById(s.tempDesktopId);
+    if (!dt) return;
+    const name = SPACE_PREFIX + (w.caption || "Fullscreen");
+    if (dt.name === name) return;
+    dt.name = name;
+}
+
 function attach(w) {
     if (!shouldManage(w)) return;
     // Only react to real state changes (fullscreen / maximize). We deliberately do
@@ -370,6 +388,7 @@ function attach(w) {
     w.fullScreenChanged.connect(function () { react(w); });
     w.maximizedChanged.connect(function () { react(w); });
     w.interactiveMoveResizeStarted.connect(function () { onInteractiveGrab(w); });
+    w.captionChanged.connect(function () { renameSpace(w); });
 }
 
 // Keep a dedicated fullscreen desktop pure: independent new windows opened while
@@ -458,6 +477,7 @@ function recoverOrphanSpaces() {
             state[owner.internalId] = {
                 tempDesktopId: dt.id, savedDesktopIds: [home.id], reason: "recovered",
                 app: appKey(owner), appClass: appClass(owner), pid: owner.pid || 0,
+                namer: true,
             };
             log("re-adopted '" + owner.caption + "' on leftover Space '" + dt.name
                 + "' (home " + home.id + ")");
