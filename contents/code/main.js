@@ -3,8 +3,24 @@
 // fullscreen or maximized (macOS Spaces style), and removes that desktop when
 // the window leaves that state or is closed.
 
-const DEBUG = false;
+// Settings come from System Settings -> Window Management -> KWin Scripts -> the
+// script's configure button (schema: contents/config/main.xml). Read ONCE at load:
+// KWin gives scripts no reliable "config changed" signal, so a change only takes
+// effect when the script is reloaded (untick/re-tick it, or re-run install.sh).
+// readConfig hands back strings for booleans depending on how the value was written,
+// hence the explicit coercion against the fallback's type.
+function cfg(key, fallback) {
+    if (typeof readConfig !== "function") return fallback;
+    const v = readConfig(key, fallback);
+    if (typeof fallback === "boolean") return v === true || v === "true";
+    return v;
+}
+
+const DEBUG = cfg("debugLogging", false);
 function log(msg) { if (DEBUG) print("[fs2desktop] " + msg); }
+
+// Off => only windows KWin flags as truly fullscreen earn a Space (see isActive).
+const MANAGE_SCREEN_SIZED = cfg("manageScreenSized", true);
 
 // Run `fn` with the "slide" desktop-switch animation temporarily disabled, so the
 // automatic hop onto (or off) a Space is instant instead of a visible slide — which
@@ -50,10 +66,18 @@ const EXCLUDED_CLASSES = [
     "kwin", "kwin_wayland", "kwin_x11",            // KWin's own internal windows
 ];
 
+// Built-ins plus whatever the user listed in the config dialog, so a new offender can
+// be excluded without editing this file.
+const EXCLUDED = EXCLUDED_CLASSES.concat(
+    ("" + cfg("excludedClasses", "")).toLowerCase()
+        .split(/[,\s]+/)
+        .filter(function (e) { return e.length > 0; })
+);
+
 function isExcluded(w) {
     const cls = ("" + (w.resourceClass || "")).toLowerCase();
     const nam = ("" + (w.resourceName || "")).toLowerCase();
-    return EXCLUDED_CLASSES.some(function (e) { return cls === e || nam === e; });
+    return EXCLUDED.some(function (e) { return cls === e || nam === e; });
 }
 
 // internalId -> { tempDesktopId, savedDesktopIds, reason, app, appClass, pid }
@@ -292,7 +316,7 @@ function moveBack(w) {
 // fullscreen — true at ANY resolution, even a game set below native res), OR if it
 // is sized to the whole screen (borderless "fullscreen windowed" games, which KWin
 // reports only as maximized). A normally-maximized window is neither.
-function isActive(w) { return w.fullScreen || coversScreen(w); }
+function isActive(w) { return w.fullScreen || (MANAGE_SCREEN_SIZED && coversScreen(w)); }
 
 // React immediately in BOTH directions — no debounce. Entering must be instant and
 // un-animated (see runNoSlide) so there's no visible slide/delay; leaving must be

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="">
+
+        <!-- Extra app identities (resourceClass/resourceName) that must never get a
+             Space, on top of the built-in list in code/main.js. Comma-separated. -->
+        <entry name="excludedClasses" type="String">
+            <default></default>
+        </entry>
+
+        <!-- Off = only real fullscreen windows get a Space; borderless
+             "fullscreen windowed" games stay put. -->
+        <entry name="manageScreenSized" type="Bool">
+            <default>true</default>
+        </entry>
+
+        <entry name="debugLogging" type="Bool">
+            <default>false</default>
+        </entry>
+
+    </group>
+</kcfg>

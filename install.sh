@@ -7,9 +7,11 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/$ID"
 
 echo "→ Installing to $DEST"
-mkdir -p "$DEST/contents/code"
-cp "$SRC/metadata.json"          "$DEST/metadata.json"
-cp "$SRC/contents/code/main.js"  "$DEST/contents/code/main.js"
+mkdir -p "$DEST/contents/code" "$DEST/contents/config" "$DEST/contents/ui"
+cp "$SRC/metadata.json"              "$DEST/metadata.json"
+cp "$SRC/contents/code/main.js"      "$DEST/contents/code/main.js"
+cp "$SRC/contents/config/main.xml"   "$DEST/contents/config/main.xml"
+cp "$SRC/contents/ui/config.ui"      "$DEST/contents/ui/config.ui"
 
 echo "→ Enabling the plugin"
 kwriteconfig6 --file kwinrc --group Plugins --key "${ID}Enabled" true

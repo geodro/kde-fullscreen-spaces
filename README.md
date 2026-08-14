@@ -25,7 +25,7 @@ Fullscreen a window — or let a borderless game fill the screen — and it glid
 - 🎯 **The Space stays pure.** Open a window from *another* app while in a fullscreen Space and it's sent back to the previous desktop (and follows you there) — exactly the macOS behavior.
 - 🖼️ **Picture‑in‑Picture friendly.** Windows belonging to the app that owns the Space stay on it — a browser's PiP window, or a second window of the fullscreen app. Matching is by class **or pid**, because Chromium/Brave's PiP window sets no Wayland `app_id` at all (it reports an empty `resourceClass`); windows with no identity are left alone rather than moved. Previously PiP dragged you to another desktop *and* knocked the browser out of fullscreen, since switching the desktop under a fullscreen window makes it react to the visibility change. When you leave fullscreen the companions come back with it, so no Space is left stranded.
 - 🫥 **Overlay‑proof.** OSDs, notifications and tiling‑helper overlays (e.g. KZones) cover the screen too — they're filtered out and never trigger anything.
-- 📸 **Screenshot‑safe.** Screenshot/recording tools put up a *real* fullscreen window to let you pick a region — property‑for‑property identical to a fullscreen game. Spectacle, Flameshot, ksnip, portal pickers and the lock screen are excluded by name (`EXCLUDED_CLASSES` in `main.js` — add your own).
+- 📸 **Screenshot‑safe.** Screenshot/recording tools put up a *real* fullscreen window to let you pick a region — property‑for‑property identical to a fullscreen game. Spectacle, Flameshot, ksnip, portal pickers and the lock screen are excluded by name — add your own in the script's settings, no code editing needed.
 - ⌨️ **One shortcut.** `Meta + F` toggles fullscreen‑to‑a‑new‑desktop for the active window. Fully rebindable.
 
 > **Works great with:** YouTube & video fullscreen, exclusive‑fullscreen games, IDEs, PDF/reading, anything you want to focus on.
@@ -87,7 +87,18 @@ The default trigger is `Meta + F`. Change it in **System Settings → Keyboard �
 
 ## ⚙️ Configuration
 
-Everything lives at the top of `contents/code/main.js` (installed to
+**System Settings → Window Management → KWin Scripts → the ⚙ next to *Fullscreen to New Desktop*:**
+
+| Setting | What it does |
+|---|---|
+| *Also give a Space to screen‑sized windows* | Off = only true fullscreen windows get a Space; borderless "fullscreen windowed" games stay put. |
+| *Excluded applications* | Comma‑separated app ids that never get a Space, on top of the built‑in list (Spectacle, Flameshot, ksnip, OBS, portal pickers, lock screen). |
+| *Log to the journal* | Turns on `[fs2desktop]` debug output — `journalctl --user -f \| grep fs2desktop`. |
+
+Settings are read when the script loads, so reload it after changing them: untick and
+re‑tick it in the KWin Scripts list, re‑run `./install.sh`, or run the three commands below.
+
+Anything not exposed there lives at the top of `contents/code/main.js` (installed to
 `~/.local/share/kwin/scripts/fullscreen-to-new-desktop/`). After editing, reload with:
 
 ```bash
@@ -97,15 +108,10 @@ qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
 ```
 
-**Fullscreen only (truest macOS behavior).** To *not* trigger on screen‑sized borderless windows, change the trigger in `evaluateNow()`:
-
-```js
-const active = w.fullScreen;              // was: w.fullScreen || coversScreen(w)
-```
-
 **Animation.** The automatic switch onto/off a Space is un‑animated (the `slide` effect is briefly suppressed) so it feels instant and doesn't flash the background through transparent windows. Your *manual* desktop switches keep animating. To keep the slide, delete the `runNoSlide(...)` wrapper and call `fn()` directly.
 
-**Debugging.** Set `const DEBUG = true;` at the top, reload, then watch:
+**Debugging.** Tick *Log to the journal* in the settings above (or set `debugLogging=true`
+under `[Script-fullscreen-to-new-desktop]` in `~/.config/kwinrc`), reload, then watch:
 
 ```bash
 journalctl --user -f -t kwin_wayland | grep fs2desktop

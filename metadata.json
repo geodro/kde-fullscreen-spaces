@@ -5,7 +5,7 @@
         "Name": "Fullscreen to New Desktop",
         "Description": "Moves fullscreen windows (and borderless screen-sized games) to their own new virtual desktop, macOS-Spaces style.",
         "Icon": "virtual-desktops",
-        "Version": "1.2.0",
+        "Version": "1.3.0",
         "License": "MIT",
         "Authors": [
             { "Name": "George Dumitrescu" }
@@ -15,5 +15,7 @@
         "EnabledByDefault": true
     },
     "X-Plasma-API": "javascript",
-    "X-Plasma-MainScript": "code/main.js"
+    "X-Plasma-MainScript": "code/main.js",
+    "X-KDE-ConfigModule": "kwin/effects/configs/kcm_kwin4_genericscripted",
+    "X-KDE-PluginKeyword": "fullscreen-to-new-desktop"
 }
