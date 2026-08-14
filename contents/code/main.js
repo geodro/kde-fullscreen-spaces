@@ -80,6 +80,13 @@ function isExcluded(w) {
     return EXCLUDED.some(function (e) { return cls === e || nam === e; });
 }
 
+// Every Space we create is named with this prefix. It is the ONLY thing that survives
+// a script reload (KWin scripts have no persistent storage, and desktop names live in
+// kwinrc), so it is what lets recoverOrphanSpaces() tell our leftovers apart from the
+// user's own desktops. Visible in the pager and the Overview — that's intentional.
+const SPACE_PREFIX = "⛶ ";
+function isSpaceName(name) { return ("" + name).indexOf(SPACE_PREFIX) === 0; }
+
 // internalId -> { tempDesktopId, savedDesktopIds, reason, app, appClass, pid }
 // We store desktop *ids* (stable strings), never VirtualDesktop wrappers, which go
 // stale as desktops are created/removed and would make later switches silently fail.
@@ -225,7 +232,7 @@ function moveToNewDesktop(w, reason) {
         const base = savedIds.length > 0 ? desktopById(savedIds[0]) : workspace.currentDesktop;
         const idx = base ? desktopIndexById(base.id) : -1;
         const insertPos = idx >= 0 ? idx + 1 : workspace.desktops.length;
-        workspace.createDesktop(insertPos, w.caption || "Fullscreen");
+        workspace.createDesktop(insertPos, SPACE_PREFIX + (w.caption || "Fullscreen"));
         dt = workspace.desktops[insertPos];
     }
     state[key] = { tempDesktopId: dt.id, savedDesktopIds: savedIds, reason: reason,
@@ -414,6 +421,58 @@ function onWindowAdded(w) {
     react(w);                  // catch windows that are BORN fullscreen/maximized (e.g. Chromium spawns a new fullscreen surface)
     redirectIfOnDedicated(w);  // ...or if it just spawned on a fullscreen desktop, move it away
 }
+
+// Windows sitting on desktop `dtId`, in stacking order.
+function windowsOn(dtId) {
+    return workspace.stackingOrder.filter(function (o) {
+        return o.desktops.some(function (d) { return d.id === dtId; });
+    });
+}
+
+// A Space is always created immediately to the RIGHT of its home desktop, so the first
+// non-Space desktop to the left is the home. Scan right as a fallback (the user may have
+// reordered desktops); null means every desktop is a Space, which we refuse to guess at.
+function homeDesktopFor(index) {
+    const list = workspace.desktops;
+    for (let i = index - 1; i >= 0; i--) if (!isSpaceName(list[i].name)) return list[i];
+    for (let i = index + 1; i < list.length; i++) if (!isSpaceName(list[i].name)) return list[i];
+    return null;
+}
+
+// The script's state lives in memory only, so a reload (crash, re-install, or toggling
+// the script off and on) used to abandon every Space it had made: the window stayed
+// stranded on a desktop nothing would ever clean up, and Meta+F no longer knew how to
+// bring it home. Walk our leftovers on startup — re-adopt the ones still in use, delete
+// the rest. Iterating backwards keeps the indices valid while removing.
+function recoverOrphanSpaces() {
+    for (let i = workspace.desktops.length - 1; i >= 0; i--) {
+        const dt = workspace.desktops[i];
+        if (!isSpaceName(dt.name)) continue;
+
+        const home = homeDesktopFor(i);
+        if (!home) { log("no home desktop for leftover Space '" + dt.name + "' — left alone"); continue; }
+
+        const occupants = windowsOn(dt.id);
+        const owner = occupants.find(function (o) { return shouldManage(o) && isActive(o); });
+        if (owner) {
+            state[owner.internalId] = {
+                tempDesktopId: dt.id, savedDesktopIds: [home.id], reason: "recovered",
+                app: appKey(owner), appClass: appClass(owner), pid: owner.pid || 0,
+            };
+            log("re-adopted '" + owner.caption + "' on leftover Space '" + dt.name
+                + "' (home " + home.id + ")");
+            continue;
+        }
+
+        // Nothing fullscreen left here: send any stragglers home and drop the Space.
+        occupants.forEach(function (o) { o.desktops = [home]; });
+        if (workspace.currentDesktop.id === dt.id) workspace.currentDesktop = home;
+        workspace.removeDesktop(dt);
+        log("removed leftover Space '" + dt.name + "' (" + occupants.length + " window(s) sent home)");
+    }
+}
+
+recoverOrphanSpaces();
 
 // Existing windows
 workspace.stackingOrder.forEach(attach);
