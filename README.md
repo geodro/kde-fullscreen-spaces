@@ -22,13 +22,15 @@ Fullscreen a window — or let a borderless game fill the screen — and it glid
 - 🎮 **Borderless games too.** A window sized exactly to the screen (borderless / "fullscreen windowed" games) gets its own Space as well. A normally‑*maximized* window — which stops at your panel — is deliberately left alone.
 - 🧠 **Game‑aware.** All windows of one app (e.g. an anti‑cheat launcher + the game) share a **single** Space instead of each spawning their own, and the flicker games produce while changing resolution settles cleanly to one Space.
 - 🧹 **Auto‑cleanup.** Exit fullscreen or close the window and its temporary desktop is removed automatically. You never accumulate stray desktops.
-- 🏷️ **Named after the window.** The Space is titled `⛶ <window title>` and follows it — switch the tab or start another video and the pager keeps up.
-- ♻️ **Survives a reload.** Spaces are named `⛶ <window title>`, so on startup the script recognises its own leftovers from a crash or a re‑install: a still‑fullscreen window is re‑adopted (its home is the desktop the Space sits next to), an abandoned one is emptied out and deleted.
+- 🏷️ **Named after the window.** The Space is titled `⛶ <window title>` and keeps up with it — switch the tab or start another video and the pager follows.
+- ♻️ **Survives a reload.** That `⛶` prefix is also how the script recognises its own leftovers after a crash or a re‑install: on startup a still‑fullscreen window is re‑adopted (its home is the desktop the Space sits next to), an abandoned Space is emptied out and deleted.
+- 🖐️ **Drag it out.** Grab a window that's on a Space and the Space is released right away, even if the window is still screen‑sized — putting a hand on it is the intent signal.
 - 🎯 **The Space stays pure.** Open a window from *another* app while in a fullscreen Space and it's sent back to the previous desktop (and follows you there) — exactly the macOS behavior.
 - 🖼️ **Picture‑in‑Picture friendly.** Windows belonging to the app that owns the Space stay on it — a browser's PiP window, or a second window of the fullscreen app. Matching is by class **or pid**, because Chromium/Brave's PiP window sets no Wayland `app_id` at all (it reports an empty `resourceClass`); windows with no identity are left alone rather than moved. Previously PiP dragged you to another desktop *and* knocked the browser out of fullscreen, since switching the desktop under a fullscreen window makes it react to the visibility change. When you leave fullscreen the companions come back with it, so no Space is left stranded.
 - 🫥 **Overlay‑proof.** OSDs, notifications and tiling‑helper overlays (e.g. KZones) cover the screen too — they're filtered out and never trigger anything.
 - 📸 **Screenshot‑safe.** Screenshot/recording tools put up a *real* fullscreen window to let you pick a region — property‑for‑property identical to a fullscreen game. Spectacle, Flameshot, ksnip, portal pickers and the lock screen are excluded by name — add your own in the script's settings, no code editing needed.
 - ⌨️ **One shortcut.** `Meta + F` toggles fullscreen‑to‑a‑new‑desktop for the active window. Fully rebindable.
+- ⚙️ **Settings, not source edits.** Exclusions, the borderless‑game trigger and debug logging live in a proper config page in System Settings.
 
 > **Works great with:** YouTube & video fullscreen, exclusive‑fullscreen games, IDEs, PDF/reading, anything you want to focus on.
 
@@ -80,6 +82,16 @@ kpackagetool6 --type KWin/Script --install kde-fullscreen-spaces
 ```
 
 Then enable it in **System Settings → Window Management → KWin Scripts**.
+
+### Uninstall
+
+```bash
+./uninstall.sh
+```
+
+Unloads the script, disables it and removes the installed copy. Its settings stay in
+`~/.config/kwinrc` under `[Script-fullscreen-to-new-desktop]`; delete that group if you
+want them gone too.
 
 ### Enable the shortcut
 
@@ -144,9 +156,17 @@ different, identifiable app is redirected to the home desktop and you follow it;
 everything else stays. The pid and no‑identity arms exist because Chromium's
 Picture‑in‑Picture window reports an empty `resourceClass` on Wayland — class alone
 never matched it. The same predicate decides who gets evacuated when the fullscreen
-window exits, so nothing we let stay can strand the Space. Apps in
-`EXCLUDED_CLASSES` are ignored on both paths, which is what keeps Spectacle's
-fullscreen capture overlay from stealing a Space.
+window exits, so nothing we let stay can strand the Space. Excluded apps — the
+built‑in `EXCLUDED_CLASSES` list plus whatever you add in the settings — are ignored
+on both paths, which is what keeps Spectacle's fullscreen capture overlay from
+stealing a Space.
+
+Nothing of this survives in memory across a reload, so the Space carries its own
+marker: it is named `⛶ <window title>`, renamed whenever that title changes, and on
+startup `recoverOrphanSpaces()` walks every `⛶` desktop — re‑adopting the one that
+still holds a fullscreen window (its home is the neighbouring ordinary desktop, which
+is where the Space was inserted from) and deleting the rest after sending any
+stragglers home.
 
 ---
 
@@ -154,7 +174,8 @@ fullscreen capture overlay from stealing a Space.
 
 - **Nothing happens.** Make sure the script is enabled (System Settings → KWin Scripts) and try logging out/in once. Confirm with:
   `qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded fullscreen-to-new-desktop`
-- **A stray desktop was left behind.** This can happen only if you *reload the script while a window is fullscreen* (the in‑memory tracking resets). Normal use — including closing a fullscreen window outright — cleans up after itself.
+- **A stray desktop was left behind.** Reload the script (or log out and in): every Space it made is named `⛶ …`, and on startup it deletes the empty ones and re‑adopts the ones still holding a fullscreen window. A desktop you renamed yourself is no longer recognised as ours — remove it in System Settings → Virtual Desktops.
+- **Meta + F stopped reacting.** The script instance died (a KWin crash will do it) while the shortcut stayed registered. Re‑run `./install.sh` — it hot‑reloads the script and cleans up anything left over.
 - **A screen‑filling window I *didn't* want moved.** The trigger is "frame exactly covers the screen". A window you manually resized to the full screen qualifies; drag it 1 px smaller, or switch the trigger to fullscreen‑only (see Configuration).
 - **I want the Space switch to animate.** By default it's un‑animated (instant). Remove the `runNoSlide(...)` wrapper in `main.js` to restore the slide.
 
