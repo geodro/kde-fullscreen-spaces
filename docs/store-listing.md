@@ -53,6 +53,8 @@ What it does:
 
 Tested on Plasma 6 under Wayland, compatible with X11.
 
+Pairs with "Game Dim" (https://store.kde.org/p/2368747/) — the two split the problem rather than overlap: this script handles the window that does cover the screen, Game Dim handles the one that doesn't, dropping the wallpaper, the panels and every other window to black around it. On a multi-monitor setup they stack: the game gets its own Space and the other screen goes black instead of showing an empty, bright desktop.
+
 Install: System Settings → Window Management → KWin Scripts → Get New Scripts, or download the .kwinscript file and use "Install from File".
 
 Source, issues and documentation: https://github.com/geodro/kde-fullscreen-spaces
