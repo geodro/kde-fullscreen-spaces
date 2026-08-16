@@ -12,6 +12,10 @@ Fullscreen a window — or let a borderless game fill the screen — and it glid
 ![KWin Script](https://img.shields.io/badge/KWin-Script-blueviolet)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow)
 
+[![Get it on the KDE Store](https://img.shields.io/badge/KDE%20Store-Get%20it-1d99f3?logo=kde&logoColor=white)](https://store.kde.org/p/2368744/)
+
+![Fullscreen to New Desktop](docs/gallery-how-it-works.png)
+
 </div>
 
 ---

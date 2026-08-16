@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Noto Sans, DejaVu Sans, sans-serif">
+  <rect width="1600" height="900" fill="#1b1e20"/>
+  <text x="100" y="118" fill="#ffffff" font-size="58" font-weight="700">Fullscreen → its own Space</text>
+  <text x="100" y="168" fill="#9aa0a6" font-size="30">Created right next to the desktop you were on. Removed the moment you leave.</text>
+
+  <!-- left: your work -->
+  <rect x="110" y="290" width="520" height="330" rx="16" fill="#2a2e32" stroke="#3a3f44" stroke-width="2"/>
+  <rect x="110" y="290" width="520" height="44" rx="16" fill="#33383d"/>
+  <rect x="110" y="318" width="520" height="16" fill="#33383d"/>
+  <circle cx="146" cy="312" r="7" fill="#5a6067"/><circle cx="170" cy="312" r="7" fill="#5a6067"/><circle cx="194" cy="312" r="7" fill="#5a6067"/>
+  <g fill="#4a5057"><rect x="146" y="376" width="300" height="14" rx="7"/><rect x="146" y="410" width="420" height="14" rx="7"/><rect x="146" y="444" width="240" height="14" rx="7"/><rect x="146" y="478" width="380" height="14" rx="7"/><rect x="146" y="512" width="180" height="14" rx="7"/></g>
+  <text x="370" y="678" fill="#9aa0a6" font-size="28" text-anchor="middle">Desktop 1 — your work</text>
+
+  <!-- arrow -->
+  <g stroke="#1d99f3" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M676 455 H906"/><path d="M876 428 L906 455 L876 482"/>
+  </g>
+  <text x="791" y="418" fill="#1d99f3" font-size="26" font-weight="600" text-anchor="middle">fullscreen</text>
+
+  <!-- right: the new space -->
+  <rect x="970" y="290" width="520" height="330" rx="16" fill="#000000" stroke="#1d99f3" stroke-width="3"/>
+  <circle cx="1230" cy="455" r="58" fill="#1d99f3" opacity="0.18"/>
+  <path d="M1212 428 L1262 455 L1212 482 Z" fill="#1d99f3"/>
+  <g fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.55">
+    <path d="M1006 356 V326 H1036"/><path d="M1424 326 H1454 V356"/><path d="M1454 554 V584 H1424"/><path d="M1036 584 H1006 V554"/>
+  </g>
+  <text x="1230" y="678" fill="#ffffff" font-size="28" text-anchor="middle">New Space — the window alone</text>
+
+  <!-- pager -->
+  <rect x="560" y="756" width="480" height="76" rx="12" fill="#2a2e32" stroke="#3a3f44" stroke-width="2"/>
+  <rect x="578" y="772" width="72" height="44" rx="8" fill="#3a3f44"/>
+  <text x="614" y="801" fill="#c8ccd0" font-size="24" text-anchor="middle">1</text>
+  <rect x="662" y="772" width="270" height="44" rx="8" fill="#1d99f3"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M686 792 V783 H695"/><path d="M700 783 H709 V792"/><path d="M709 800 V809 H700"/><path d="M695 809 H686 V800"/>
+  </g>
+  <text x="726" y="801" fill="#ffffff" font-size="24">Big Buck Bunny</text>
+  <rect x="944" y="772" width="72" height="44" rx="8" fill="#3a3f44"/>
+  <text x="980" y="801" fill="#c8ccd0" font-size="24" text-anchor="middle">2</text>
+</svg>
