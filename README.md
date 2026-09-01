@@ -26,6 +26,7 @@ Fullscreen a window — or let a borderless game fill the screen — and it glid
 - 🎮 **Borderless games too.** A window sized exactly to the screen (borderless / "fullscreen windowed" games) gets its own Space as well. A normally‑*maximized* window — which stops at your panel — is deliberately left alone.
 - 🧠 **Game‑aware.** All windows of one app (e.g. an anti‑cheat launcher + the game) share a **single** Space instead of each spawning their own, and the flicker games produce while changing resolution settles cleanly to one Space.
 - 🧹 **Auto‑cleanup.** Exit fullscreen or close the window and its temporary desktop is removed automatically. You never accumulate stray desktops.
+- 🔀 **Most‑recently‑used order.** Switch to a Space and it moves to the front of the row of Spaces, so the one you used last is always one step to the right of your desktop — macOS keeps your last full‑screen app one swipe away. The move waits for the switch animation to finish, so the slide stays smooth. Turn it off in the settings if you'd rather Spaces never moved.
 - 🏷️ **Named after the window.** The Space is titled `⛶ <window title>` and keeps up with it — switch the tab or start another video and the pager follows.
 - ♻️ **Survives a reload.** That `⛶` prefix is also how the script recognises its own leftovers after a crash or a re‑install: on startup a still‑fullscreen window is re‑adopted (its home is the desktop the Space sits next to), an abandoned Space is emptied out and deleted.
 - 🖐️ **Drag it out.** Grab a window that's on a Space and the Space is released right away, even if the window is still screen‑sized — putting a hand on it is the intent signal.
@@ -112,6 +113,7 @@ The default trigger is `Meta + F`. Change it in **System Settings → Keyboard �
 | Setting | What it does |
 |---|---|
 | *Also give a Space to screen‑sized windows* | Off = only true fullscreen windows get a Space; borderless "fullscreen windowed" games stay put. |
+| *Keep the Space you last used next to your desktop* | On = switching to a Space moves it to the front of the row of Spaces, so the one you used last is always one step away (most‑recently‑used order). Off = Spaces keep the position they were created at. |
 | *Excluded applications* | Comma‑separated app ids that never get a Space, on top of the built‑in list (Spectacle, Flameshot, ksnip, OBS, portal pickers, lock screen). |
 | *Log to the journal* | Turns on `[fs2desktop]` debug output — `journalctl --user -f \| grep fs2desktop`. |
 
@@ -167,12 +169,24 @@ built‑in `EXCLUDED_CLASSES` list plus whatever you add in the settings — are
 on both paths, which is what keeps Spectacle's fullscreen capture overlay from
 stealing a Space.
 
+Switching to a Space re‑sorts it: it is moved to the front of its row of Spaces —
+the slot right after the last ordinary desktop — so the Space you used most recently
+is always the nearest one. KWin's `workspace.moveDesktop()` does the move outright,
+with no desktop created or destroyed and no window re‑assigned, so ids and window
+placement are untouched. It waits for the switch animation first: there is no
+"animation finished" signal, but `workspace.isEffectActive("slide")` answers the
+question, and moving a desktop out from under a running slide is what made it stutter.
+The wait is not conditional on you still standing on that Space — a slide reports
+active for about a second, and hopping onward inside that second is exactly what
+people do. Untick *Keep the Space you last used next to your desktop* to switch the
+whole behaviour off.
+
 Nothing of this survives in memory across a reload, so the Space carries its own
 marker: it is named `⛶ <window title>`, renamed whenever that title changes, and on
 startup `recoverOrphanSpaces()` walks every `⛶` desktop — re‑adopting the one that
-still holds a fullscreen window (its home is the neighbouring ordinary desktop, which
-is where the Space was inserted from) and deleting the rest after sending any
-stragglers home.
+still holds a fullscreen window (its home is the nearest ordinary desktop to the left
+— where the Space was inserted from, and where re‑sorting keeps it) and deleting the
+rest after sending any stragglers home.
 
 ---
 

@@ -22,6 +22,9 @@ function log(msg) { if (DEBUG) print("[fs2desktop] " + msg); }
 // Off => only windows KWin flags as truly fullscreen earn a Space (see isActive).
 const MANAGE_SCREEN_SIZED = cfg("manageScreenSized", true);
 
+// Off => Spaces stay wherever they were created (see the Space ordering section).
+const REORDER_ON_SWITCH = cfg("reorderOnSwitch", true);
+
 // Run `fn` with the "slide" desktop-switch animation temporarily disabled, so the
 // automatic hop onto (or off) a Space is instant instead of a visible slide — which
 // otherwise flashes the wallpaper/background through a transparent fullscreen window.
@@ -448,9 +451,84 @@ function windowsOn(dtId) {
     });
 }
 
-// A Space is always created immediately to the RIGHT of its home desktop, so the first
-// non-Space desktop to the left is the home. Scan right as a fallback (the user may have
-// reordered desktops); null means every desktop is a Space, which we refuse to guess at.
+// --- macOS-style Space ordering ------------------------------------------------------
+// Spaces are re-sorted as you NAVIGATE, not once and for all when they are created: the
+// Space you just switched to — alt+tab, a taskbar click, the pager — moves to the FRONT of
+// its row of Spaces, i.e. immediately after the last ordinary desktop before it. So the
+// Space you used most recently is always the first one to the right of your desktop, and
+// the one before it slides one place further out. Most-recently-used order, like macOS
+// keeps your last full-screen app one swipe away.
+//
+// The move waits for the slide animating that navigation to end. KWin fires no
+// "animation finished" signal, but workspace.isEffectActive() answers the question
+// directly, so we poll it instead of guessing a delay — measured here, a slide reports
+// active for a good second, which is why a fixed 600ms wait still landed on its tail and
+// stuttered.
+
+// Is this one of the desktops we created (and still own)?
+function isOurSpace(dtId) {
+    for (const key in state) {
+        if (state[key].tempDesktopId === dtId) return true;
+    }
+    return false;
+}
+
+// First slot of the run of Spaces that `index` belongs to: walk left past Spaces until an
+// ordinary desktop (or the start of the row) stops us.
+function frontOfSpaceRun(index) {
+    const list = workspace.desktops;
+    let i = index;
+    while (i > 0 && isSpaceName(list[i - 1].name)) i--;
+    return i;
+}
+
+// Reused, not created per call: a QTimer made inside a function can be collected before it
+// ever fires. start() on a running timer restarts it, so a fast burst of switches only
+// reorders once, for wherever you actually came to rest.
+const SLIDE_POLL_MS = 100;
+const SLIDE_MAX_WAIT_MS = 3000;   // never wait forever on a slide that never reports done
+const reorderTimer = new QTimer();
+reorderTimer.singleShot = true;
+reorderTimer.interval = SLIDE_POLL_MS;
+let pendingSpaceId = null;
+let waited = 0;
+
+reorderTimer.timeout.connect(function () {
+    // Still sliding: moving a desktop out from under the animation is exactly what made it
+    // stutter. Come back in a moment.
+    if (workspace.isEffectActive("slide") && waited < SLIDE_MAX_WAIT_MS) {
+        waited += SLIDE_POLL_MS;
+        reorderTimer.start();
+        return;
+    }
+    const spaceId = pendingSpaceId;
+    pendingSpaceId = null;
+    // Deliberately NOT conditional on still being on that Space: a slide reports active for
+    // about a second, and switching away inside that second is exactly what people do while
+    // hopping between Spaces. Requiring it to still be current meant the reorder was
+    // dropped nearly every time. The Space is the one you used last either way, and with no
+    // animation running its move is safe wherever you happen to be standing.
+    if (!spaceId) return;
+    const here = desktopIndexById(spaceId);
+    if (here < 0) return;                        // Space is gone (left fullscreen)
+    const target = frontOfSpaceRun(here);
+    if (here === target) return;                 // already the nearest Space
+    workspace.moveDesktop(desktopById(spaceId), target);   // moveDesktop takes the FINAL index
+    log("re-sorted Space to position " + target);
+});
+
+function onDesktopEntered() {
+    const current = workspace.currentDesktop;
+    if (!current || !isOurSpace(current.id)) return;
+    pendingSpaceId = current.id;
+    waited = 0;
+    reorderTimer.start();
+}
+
+// A Space is created immediately to the RIGHT of its home desktop, and re-sorted next to
+// whatever desktop you last came from, so the first non-Space desktop to the left is the
+// best guess at its home. Scan right as a fallback (the user may have reordered desktops);
+// null means every desktop is a Space, which we refuse to guess at.
 function homeDesktopFor(index) {
     const list = workspace.desktops;
     for (let i = index - 1; i >= 0; i--) if (!isSpaceName(list[i].name)) return list[i];
@@ -500,6 +578,8 @@ workspace.stackingOrder.forEach(attach);
 workspace.windowAdded.connect(onWindowAdded);
 // Cleanup on close (window may vanish while on its temp desktop).
 workspace.windowRemoved.connect(function (w) { moveBack(w); });
+// Bring the Space you switch to to the front of the row of Spaces.
+if (REORDER_ON_SWITCH) workspace.currentDesktopChanged.connect(onDesktopEntered);
 
 // Global shortcut: toggle fullscreen on the active window (rest happens via handler).
 // Reconfigurable in System Settings -> Shortcuts -> KWin.

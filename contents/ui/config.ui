@@ -25,6 +25,23 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="kcfg_reorderOnSwitch">
+        <property name="text">
+         <string>Keep the Space you last used next to your desktop</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelReorder">
+        <property name="text">
+         <string>Switching to a Space moves it to the front of the row of Spaces, so the one you used last is always one step away. Off leaves every Space where it was created.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="labelScreenSized">
         <property name="text">
          <string>Borderless "fullscreen windowed" games are reported by KWin as merely maximized. With this off, only real fullscreen windows get their own Space.</string>

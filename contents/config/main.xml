@@ -18,6 +18,13 @@
             <default>true</default>
         </entry>
 
+        <!-- On = the Space you switch to jumps to the front of the row of Spaces
+             (most-recently-used order, macOS style). Off = Spaces keep the position
+             they were created at. -->
+        <entry name="reorderOnSwitch" type="Bool">
+            <default>true</default>
+        </entry>
+
         <entry name="debugLogging" type="Bool">
             <default>false</default>
         </entry>
