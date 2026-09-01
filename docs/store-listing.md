@@ -7,7 +7,7 @@ Fullscreen to New Desktop
 Plasma 6 → KWin Scripts
 
 **Version**
-1.5.0
+1.6.0
 
 **Link to Source/Code**
 https://github.com/geodro/kde-fullscreen-spaces
