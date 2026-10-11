@@ -215,11 +215,21 @@ function realBaseIds(w) {
     return out;
 }
 
+// gamescope replaces its window while staying fullscreen: the old one closes and the new
+// one is born on the Space being vacated. moveBack's cleanup then sees that Space as in use
+// and keeps it, while we would open a second Space for the newcomer — leaving the first one
+// empty for good. A window born alone on a Space nobody owns adopts it instead.
+function vacatedSpaceUnder(w) {
+    const d = w.desktops.length === 1 ? w.desktops[0] : null;
+    if (!d || !isSpaceName(d.name) || isOurSpace(d.id)) return null;
+    return desktopById(d.id);
+}
+
 function moveToNewDesktop(w, reason) {
     const key = w.internalId;
     if (state[key]) return; // already managed — don't create a second desktop
 
-    const savedIds = realBaseIds(w);          // real home desktop ids (empty = "all")
+    let savedIds = realBaseIds(w);            // real home desktop ids (empty = "all")
 
     // If another window of the same app already owns a dedicated desktop, join it
     // instead of creating a second Space (see appKey). When it later leaves
@@ -228,8 +238,15 @@ function moveToNewDesktop(w, reason) {
     const sharedId = existingDesktopForApp(w);
     let dt = sharedId ? desktopById(sharedId) : null;
     const joined = !!dt;
+    const vacated = dt ? null : vacatedSpaceUnder(w);
     if (dt) {
         log("joining existing desktop for app '" + (w.resourceClass || w.caption) + "'");
+    } else if (vacated) {
+        // The Space's home is the desktop it sits next to, never the Space itself.
+        const home = homeDesktopFor(desktopIndexById(vacated.id));
+        savedIds = home ? [home.id] : [];
+        dt = vacated;
+        log("adopting vacated Space '" + vacated.name + "' for '" + w.caption + "'");
     } else {
         // Insert the new desktop immediately AFTER the window's current desktop
         // (macOS-style: the Space appears right next to the current one), not at the end.
