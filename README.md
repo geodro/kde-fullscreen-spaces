@@ -23,7 +23,7 @@ Fullscreen a window — or let a borderless game fill the screen — and it glid
 ## ✨ What it does
 
 - 🎬 **Fullscreen → own Space.** Any window that goes truly fullscreen (a video, a game, a presentation — at *any* resolution) is moved to a brand‑new virtual desktop created *immediately after* your current one.
-- 🎮 **Borderless games too.** A window sized exactly to the screen (borderless / "fullscreen windowed" games) gets its own Space as well. A normally‑*maximized* window — which stops at your panel — is deliberately left alone.
+- 🎮 **Borderless games too.** A window sized exactly to the screen (borderless / "fullscreen windowed" games) gets its own Space as well. A normally‑*maximized* window — which stops at your panel — is left alone, unless you ask for it in the settings (handy with a scrolling tiler such as [Ribbon](https://github.com/geodro/kde-ribbon)).
 - 🧠 **Game‑aware.** All windows of one app (e.g. an anti‑cheat launcher + the game) share a **single** Space instead of each spawning their own, and the flicker games produce while changing resolution settles cleanly to one Space.
 - 🧹 **Auto‑cleanup.** Exit fullscreen or close the window and its temporary desktop is removed automatically. You never accumulate stray desktops.
 - 🔀 **Most‑recently‑used order.** Switch to a Space and it moves to the front of the row of Spaces, so the one you used last is always one step to the right of your desktop — macOS keeps your last full‑screen app one swipe away. The move waits for the switch animation to finish, so the slide stays smooth. Turn it off in the settings if you'd rather Spaces never moved.
@@ -113,6 +113,7 @@ The default trigger is `Meta + F`. Change it in **System Settings → Keyboard �
 | Setting | What it does |
 |---|---|
 | *Also give a Space to screen‑sized windows* | Off = only true fullscreen windows get a Space; borderless "fullscreen windowed" games stay put. |
+| *Also give a Space to maximized windows* | On = maximizing a window sends it to its own Space too, title bar and all. Off by default. |
 | *Keep the Space you last used next to your desktop* | On = switching to a Space moves it to the front of the row of Spaces, so the one you used last is always one step away (most‑recently‑used order). Off = Spaces keep the position they were created at. |
 | *Excluded applications* | Comma‑separated app ids that never get a Space, on top of the built‑in list (Spectacle, Flameshot, ksnip, OBS, portal pickers, lock screen). |
 | *Log to the journal* | Turns on `[fs2desktop]` debug output — `journalctl --user -f \| grep fs2desktop`. |

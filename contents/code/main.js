@@ -22,6 +22,10 @@ function log(msg) { if (DEBUG) print("[fs2desktop] " + msg); }
 // Off => only windows KWin flags as truly fullscreen earn a Space (see isActive).
 const MANAGE_SCREEN_SIZED = cfg("manageScreenSized", true);
 
+// On => a maximized window gets a Space too, keeping its title bar — what a scrolling
+// tiler like Ribbon needs, where maximize otherwise just leaves the other windows behind it.
+const MANAGE_MAXIMIZED = cfg("manageMaximized", false);
+
 // Off => Spaces stay wherever they were created (see the Space ordering section).
 const REORDER_ON_SWITCH = cfg("reorderOnSwitch", true);
 
@@ -346,8 +350,12 @@ function moveBack(w) {
 // A window earns its own Space if KWin flags it fullscreen (real exclusive
 // fullscreen — true at ANY resolution, even a game set below native res), OR if it
 // is sized to the whole screen (borderless "fullscreen windowed" games, which KWin
-// reports only as maximized). A normally-maximized window is neither.
-function isActive(w) { return w.fullScreen || (MANAGE_SCREEN_SIZED && coversScreen(w)); }
+// reports only as maximized). A normally-maximized window is neither, unless
+// MANAGE_MAXIMIZED asks for it.
+function isActive(w) {
+    return w.fullScreen || (MANAGE_SCREEN_SIZED && coversScreen(w))
+        || (MANAGE_MAXIMIZED && w.maximizeMode === 3);
+}
 
 // React immediately in BOTH directions — no debounce. Entering must be instant and
 // un-animated (see runNoSlide) so there's no visible slide/delay; leaving must be

@@ -25,6 +25,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="kcfg_manageMaximized">
+        <property name="text">
+         <string>Also give a Space to maximized windows</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QCheckBox" name="kcfg_reorderOnSwitch">
         <property name="text">
          <string>Keep the Space you last used next to your desktop</string>

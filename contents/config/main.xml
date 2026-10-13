@@ -18,6 +18,11 @@
             <default>true</default>
         </entry>
 
+        <!-- On = a maximized window gets a Space too, title bar and all. -->
+        <entry name="manageMaximized" type="Bool">
+            <default>false</default>
+        </entry>
+
         <!-- On = the Space you switch to jumps to the front of the row of Spaces
              (most-recently-used order, macOS style). Off = Spaces keep the position
              they were created at. -->
